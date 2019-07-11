@@ -1,1 +1,3 @@
-# CS4390
+# fs
+
+Simple file sharing program using UDP
