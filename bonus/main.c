@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+
+#include "server.h"
 
 /*
  * Commandline args:
@@ -19,23 +22,26 @@ void usage () {
     printf("\t\t\tif -c, connect to port\n");
 }
 
-int is_valid_port (int port) {
+int is_valid_port (const char *p) {
+    int port = atoi(p);
     return port > 0 && port <= 65535;
 }
 
-int is_valid_ip (const int *ip) {
-    return *ip >= 0 && *ip <= 255 &&
-            *(ip + 1) >= 0 && *(ip + 1) <= 255 &&
-            *(ip + 2) >= 0 && *(ip + 2) <= 255 &&
-            *(ip + 3) >= 0 && *(ip + 3) <= 255;
+int is_valid_ip (const char *ip) {
+    int i[4] = {0,0,0,0};
+    sscanf(ip, " %d.%d.%d.%d", i, (i + 1), (i + 2), (i + 3));
+    return *i >= 0 && *i <= 255 &&
+            *(i + 1) >= 0 && *(i + 1) <= 255 &&
+            *(i + 2) >= 0 && *(i + 2) <= 255 &&
+            *(i + 3) >= 0 && *(i + 3) <= 255;
 }
 
 int main (int argc, char **argv) {
     int opt;
     int server = 0;
     int client = 0;
-    int port = 0;
-    int ip[4] = {0,0,0,0};
+    char *port;
+    char *ip;
 
     if (argc == 1) {
         goto fail;
@@ -49,10 +55,10 @@ int main (int argc, char **argv) {
             break;
         case 'c':
             client = 1;
-            sscanf(optarg, " %d.%d.%d.%d", ip, (ip + 1), (ip + 2), (ip + 3));
+            ip = strdup(optarg);
             break;
         case 'p':
-            port = atoi(optarg);
+            port = strdup(optarg);
             break;
         default:
             goto fail;
@@ -66,9 +72,7 @@ int main (int argc, char **argv) {
 
     /* Server mode */
     if (server && is_valid_port(port)) {
-        printf("Begin server mode\n");
-        printf("Port: %d\n", port);
-        exit(EXIT_SUCCESS);
+        begin_server_mode(port);
     } else if (server) {
         printf("Valid port required\n");
         goto fail;
@@ -77,8 +81,8 @@ int main (int argc, char **argv) {
     /* Client mode */
     if (is_valid_ip(ip) && is_valid_port(port)) {
         printf("Client mode\n");
-        printf("IP: %d.%d.%d.%d\n", *ip, *(ip + 1), *(ip + 2), *(ip + 3));
-        printf("Port: %d\n", port);
+        printf("IP: %s\n", ip);
+        printf("Port: %s\n", port);
         exit(EXIT_SUCCESS);
     } else if (is_valid_ip(ip)) {
         printf("Valid port required\n");
@@ -91,7 +95,6 @@ int main (int argc, char **argv) {
         goto fail;
     }
 
-    exit(EXIT_SUCCESS);
 fail:
     usage();
     exit(EXIT_FAILURE);
