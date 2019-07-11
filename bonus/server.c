@@ -12,15 +12,16 @@
 
 /* Port number for incoming requests */
 char *port;
-/* File descriptor socket */
-int sock;
+/* File descriptor for socket */
+int serv_sock;
+/* Connected peer stuff */
+struct sockaddr_storage peer_addr;
+socklen_t peer_addr_len;
 
-int create_socket () {
+int create_server_socket () {
     struct addrinfo hints;
     struct addrinfo *result;
     struct addrinfo *rp;
-    struct sockaddr_storage peer_addr;
-    socklen_t peer_addr_len;
 
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = DOMAIN;
@@ -39,17 +40,17 @@ int create_socket () {
 
     /* Attempt to bind */
     for (rp = result; rp; rp = rp->ai_next) {
-        sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sock == -1) {
+        serv_sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (serv_sock == -1) {
             continue;
         }
 
-        if (!bind(sock, rp->ai_addr, rp->ai_addrlen)) {
+        if (!bind(serv_sock, rp->ai_addr, rp->ai_addrlen)) {
             /* Successfully bind */
             break;
         }
 
-        close(sock);
+        close(serv_sock);
     }
 
     if (!rp) {
@@ -57,7 +58,7 @@ int create_socket () {
         return -1;
     }
 
-    printf("Successfully bound socket\n");
+    printf("Successfully bound socket to port %s\n", port);
 
     freeaddrinfo(result);
 
@@ -69,15 +70,40 @@ void begin_server_mode (char *p) {
     printf("Begin server mode\n");
     printf("Port: %s\n", port);
 
-    if (!create_socket()) {
+    if (!create_server_socket()) {
         printf("Successfully created server socket\n");
     } else {
         printf("Failed to create server socket\n");
         exit(EXIT_FAILURE);
     }
 
+    /* Test get data */
+    while (1) {
+        ssize_t nread;
+        int i;
+        char host[NI_MAXHOST];
+        char service[NI_MAXSERV];
+
+        peer_addr_len = sizeof(struct sockaddr_storage);
+        nread = recvfrom(serv_sock, &i, sizeof(int), 0,
+            (struct sockaddr*) &peer_addr, &peer_addr_len);
+
+        if (!getnameinfo((struct sockaddr*) &peer_addr, peer_addr_len, host,
+            NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV)) {
+            printf("Got %d from client\n", i);
+            i = -i;
+        } else {
+            printf("Failed request\n");
+        }
+
+        if (sendto(serv_sock, &i, nread, 0, (struct sockaddr*) &peer_addr,
+            peer_addr_len) != nread) {
+            printf("Failed to send response\n");
+        }
+    }
+
     /* Cleanup */
-    close(sock);
+    close(serv_sock);
 
     exit(EXIT_SUCCESS);
 }

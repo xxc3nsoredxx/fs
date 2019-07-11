@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "client.h"
 #include "server.h"
 
 /*
@@ -40,8 +41,8 @@ int main (int argc, char **argv) {
     int opt;
     int server = 0;
     int client = 0;
-    char *port;
-    char *ip;
+    char *port = "-1";
+    char *ip = "-1";
 
     if (argc == 1) {
         goto fail;
@@ -80,10 +81,7 @@ int main (int argc, char **argv) {
 
     /* Client mode */
     if (is_valid_ip(ip) && is_valid_port(port)) {
-        printf("Client mode\n");
-        printf("IP: %s\n", ip);
-        printf("Port: %s\n", port);
-        exit(EXIT_SUCCESS);
+        begin_client_mode(ip, port);
     } else if (is_valid_ip(ip)) {
         printf("Valid port required\n");
         goto fail;
