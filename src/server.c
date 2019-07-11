@@ -1,3 +1,4 @@
+#include <ifaddrs.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,39 @@ int serv_sock;
 /* Connected peer stuff */
 struct sockaddr_storage peer_addr;
 socklen_t peer_addr_len;
+
+void display_server_ip () {
+    struct ifaddrs *ifaddr;
+    struct ifaddrs *ifa;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        printf("Error getting server IP info\n");
+        return;
+    }
+
+    for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+        struct sockaddr *adr = ifa->ifa_addr;
+        int family;
+        char host[NI_MAXHOST];
+
+        if (!adr || !strcmp(ifa->ifa_name, "lo")) {
+            continue;
+        }
+
+        family = adr->sa_family;
+
+        if (family != DOMAIN ||
+            getnameinfo(adr, sizeof(struct sockaddr_in), host, NI_MAXHOST,
+                NULL, 0, NI_NUMERICHOST)) {
+            continue;
+        }
+
+        printf("Interface: %s\n", ifa->ifa_name);
+        printf("\tAddress: %s\n", host);
+    }
+
+    freeifaddrs(ifaddr);
+}
 
 int create_server_socket () {
     struct addrinfo hints;
@@ -68,6 +102,7 @@ int create_server_socket () {
 void begin_server_mode (char *p) {
     port = p;
     printf("Begin server mode\n");
+    display_server_ip();
     printf("Port: %s\n", port);
 
     if (!create_server_socket()) {

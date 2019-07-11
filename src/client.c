@@ -70,8 +70,8 @@ void begin_client_mode (char *i, char *p) {
     port = p;
 
     printf("Begin client mode\n");
-    printf("IP: %s\n", ip);
-    printf("Port: %s\n", port);
+    printf("Server IP address: %s\n", ip);
+    printf("Server port: %s\n", port);
 
     if (!create_client_socket()) {
         printf("Successfully created soccet\n");
