@@ -18,6 +18,8 @@ int serv_sock;
 /* Connected peer stuff */
 struct sockaddr_storage peer_addr;
 socklen_t peer_addr_len;
+/* Full packet */
+char packet[sizeof(struct prot_head) + MAX_LEN];
 /* Header read from the packet */
 struct prot_head head;
 /* Data read from the packet */
@@ -129,20 +131,26 @@ void begin_server_mode (char *p) {
     while (active) {
         peer_addr_len = sizeof(socklen_t);
 
-        /* Read the header */
-        nread = recvfrom(serv_sock, &head, sizeof(struct prot_head), 0,
+        /* Get the packet */
+        memset(packet, 0, sizeof(packet));
+        nread = recvfrom(serv_sock, packet, sizeof(packet), 0,
             (struct sockaddr*) &peer_addr, &peer_addr_len);
         if (!getnameinfo((struct sockaddr*) &peer_addr, peer_addr_len,
             host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV)) {
+            /* Read the header */
+            memcpy(&head, packet, sizeof(head));
             /* Parse the header */
-            if (head.type == DH_INIT) {
-                /* Begin the Diffie-Hellmann key exchange on the server */
-                printf("Got a DH_INIT from client\n");
-                key = dhkx_server(serv_sock, nread,
+            if (head.type == KEY) {
+                /* Begin the key exchange on the server */
+                printf("Got a KEY from client\n");
+                key = kx_server(head, packet, serv_sock, nread,
                     (struct sockaddr*) &peer_addr, peer_addr_len);
-                printf("Key: %d\n", key);
-            } else if (head.type == DH_RESET) {
-                printf("Got a DH_RESET from client\n");
+                if (key > 0) {
+                    printf("Key: %d\n", key);
+                }
+            } else if (head.type == KEY_RESET) {
+                printf("Got a KEY_RESET from client\n");
+                key = 0;
             } else if (head.type == CLOSE_CONNECTION) {
                 printf("Got a CLOSE_CONNECTION from client\n");
                 active = 0;

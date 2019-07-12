@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "client.h"
@@ -47,6 +48,9 @@ int main (int argc, char **argv) {
     if (argc == 1) {
         goto fail;
     }
+
+    /* Seed random */
+    srand(time(NULL));
 
     /* Parse commandline args */
     while ((opt = getopt(argc, argv, OPTSTR)) != -1) {

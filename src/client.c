@@ -87,8 +87,8 @@ void begin_client_mode (char *i, char *p) {
         exit(EXIT_FAILURE);
     }
 
-    /* Begin the Diffie-Hellmann key exchange on the client */
-    key = dhkx_client(cli_sock);
+    /* Begin the key exchange on the client */
+    key = kx_client(cli_sock);
     printf("Key: %d\n", key);
 
     memset(&head, 0, sizeof(head));
