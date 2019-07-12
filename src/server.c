@@ -18,7 +18,12 @@ int serv_sock;
 /* Connected peer stuff */
 struct sockaddr_storage peer_addr;
 socklen_t peer_addr_len;
+/* Header read from the packet */
+struct prot_head head;
+/* Data read from the packet */
+char *data;
 
+/* Display the IPv4 address for any interfaces */
 void display_server_ip () {
     struct ifaddrs *ifaddr;
     struct ifaddrs *ifa;
@@ -52,6 +57,7 @@ void display_server_ip () {
     freeifaddrs(ifaddr);
 }
 
+/* Create the server-side socket */
 int create_server_socket () {
     struct addrinfo hints;
     struct addrinfo *result;
@@ -99,7 +105,14 @@ int create_server_socket () {
     return 0;
 }
 
+/* Entry point into server mode */
 void begin_server_mode (char *p) {
+    int active = 1;
+    int key = 0;
+    ssize_t nread;
+    char host[NI_MAXHOST];
+    char service[NI_MAXSERV];
+
     port = p;
     printf("Begin server mode\n");
     display_server_ip();
@@ -112,7 +125,35 @@ void begin_server_mode (char *p) {
         exit(EXIT_FAILURE);
     }
 
+    /* Read packet from the socket */
+    while (active) {
+        peer_addr_len = sizeof(socklen_t);
+
+        /* Read the header */
+        nread = recvfrom(serv_sock, &head, sizeof(struct prot_head), 0,
+            (struct sockaddr*) &peer_addr, &peer_addr_len);
+        if (!getnameinfo((struct sockaddr*) &peer_addr, peer_addr_len,
+            host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV)) {
+            /* Parse the header */
+            if (head.type == DH_INIT) {
+                /* Begin the Diffie-Hellmann key exchange on the server */
+                printf("Got a DH_INIT from client\n");
+                key = dhkx_server(serv_sock, nread,
+                    (struct sockaddr*) &peer_addr, peer_addr_len);
+                printf("Key: %d\n", key);
+            } else if (head.type == DH_RESET) {
+                printf("Got a DH_RESET from client\n");
+            } else if (head.type == CLOSE_CONNECTION) {
+                printf("Got a CLOSE_CONNECTION from client\n");
+                active = 0;
+            } else {
+                printf("Invalid message %d from client\n", head.type);
+            }
+        }
+    }
+
     /* Test get data */
+    /*
     while (1) {
         ssize_t nread;
         int i;
@@ -136,6 +177,7 @@ void begin_server_mode (char *p) {
             printf("Failed to send response\n");
         }
     }
+    */
 
     /* Cleanup */
     close(serv_sock);

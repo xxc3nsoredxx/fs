@@ -16,7 +16,12 @@ char *ip;
 char *port;
 /* File descriptor for socket */
 int cli_sock;
+/* Header to send */
+struct prot_head head;
+/* Data to send */
+char *data;
 
+/* Create the client-side socket */
 int create_client_socket () {
     struct addrinfo hints;
     struct addrinfo *result;
@@ -62,10 +67,12 @@ int create_client_socket () {
     return 0;
 }
 
+/* Entry point into client mode */
 void begin_client_mode (char *i, char *p) {
-    int j = 0;
-    int k = 0;
-    ssize_t len = sizeof(int);
+    int key = 0;
+    /* int j = 0; */
+    /* int k = 0; */
+    /* ssize_t len = sizeof(int); */
     ip = i;
     port = p;
 
@@ -80,7 +87,20 @@ void begin_client_mode (char *i, char *p) {
         exit(EXIT_FAILURE);
     }
 
+    /* Begin the Diffie-Hellmann key exchange on the client */
+    key = dhkx_client(cli_sock);
+    printf("Key: %d\n", key);
+
+    memset(&head, 0, sizeof(head));
+    head.type = CLOSE_CONNECTION;
+    if (write(cli_sock, &head, sizeof(head)) != sizeof(head)) {
+        printf("Failed to write everything\n");
+        close(cli_sock);
+        exit(EXIT_FAILURE);
+    }
+
     /* Test sending data */
+    /*
     printf("> ");
     scanf(" %d", &j);
     while (j >= 0) {
@@ -100,6 +120,7 @@ void begin_client_mode (char *i, char *p) {
         printf("> ");
         scanf(" %d", &j);
     }
+    */
 
     /* Cleanup */
     close(cli_sock);

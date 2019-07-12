@@ -7,7 +7,7 @@ all: fs
 fs: $(OBJS)
 	$(CC) $(OBJS) -o fs
 
-client.o: client.c client.h
+client.o: client.c client.h protocol.h
 	$(CC) $(CFLAGS) client.c
 
 main.o: main.c client.h server.h
