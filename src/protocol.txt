@@ -14,10 +14,12 @@ Packet Format:
     +----------------+----------------+ -+
     |                                 |  |
     |             MD5-sum             |  |
-    |             128bits             |  |  Protocol Header
-    |                                 |  |
+    |             128bits             |  |
+    |                                 |  |  Protocol Header
     +----------------+----------------+  |
     |    msg type    |  data length   |  |
+    +----------------+----------------+  |
+    |   stop index   |    segment     |  |
     +----------------+----------------+ -+
     |               ...               |  |
     |              data               |  |  Data Block
@@ -34,3 +36,11 @@ Message Types:
 
 Data Length:
     Data length is given in number of 32 bit words
+    Max data block length is 1024 bytes
+
+Stop Index:
+    The byte in the last word which ends the actual data
+
+Segment:
+    The segment number for packets which carry a large file
+    Zero by default

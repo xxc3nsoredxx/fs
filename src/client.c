@@ -10,16 +10,17 @@
 #include "protocol.h"
 #include "client.h"
 
+#ifndef PACKET
+#define PACKET
+char packet[sizeof(head) + MAX_LEN];
+#endif
+
 /* IP address to connect to */
 char *ip;
 /* Port to connect to */
 char *port;
 /* File descriptor for socket */
 int cli_sock;
-/* Header to send */
-struct prot_head head;
-/* Data to send */
-char *data;
 
 /* Create the client-side socket */
 int create_client_socket () {
@@ -91,36 +92,15 @@ void begin_client_mode (char *i, char *p) {
     key = kx_client(cli_sock);
     printf("Key: %d\n", key);
 
+    /* Close the connetion */
+    printf("Sending a CLOSE_CONNECTION to server\n");
     memset(&head, 0, sizeof(head));
     head.type = CLOSE_CONNECTION;
-    if (write(cli_sock, &head, sizeof(head)) != sizeof(head)) {
+    if (!send_packet_c(cli_sock)) {
         printf("Failed to write everything\n");
         close(cli_sock);
         exit(EXIT_FAILURE);
     }
-
-    /* Test sending data */
-    /*
-    printf("> ");
-    scanf(" %d", &j);
-    while (j >= 0) {
-        if (write(cli_sock, &j, len) != len) {
-            printf("Failed to write everything\n");
-            close(cli_sock);
-            exit(EXIT_FAILURE);
-        }
-
-        if (read(cli_sock, &k, len) == -1) {
-            printf("Failed to read from socket\n");
-            close(cli_sock);
-            exit(EXIT_FAILURE);
-        }
-
-        printf("Got %d from server\n", k);
-        printf("> ");
-        scanf(" %d", &j);
-    }
-    */
 
     /* Cleanup */
     close(cli_sock);

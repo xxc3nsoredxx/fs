@@ -11,19 +11,28 @@
 #include "protocol.h"
 #include "server.h"
 
+#ifndef PACKET
+#define PACKET
+char packet[sizeof(head) + MAX_LEN];
+#endif
+
+char test1[100];
+char test2[500];
+
+void generate_test_data () {
+    int cx;
+    for (cx = 0; cx < 500; cx++) {
+        *(test2 + cx) = cx % 10;
+        if (cx < 100) {
+            *(test1 + cx) = cx % 5;
+        }
+    }
+}
+
 /* Port number for incoming requests */
 char *port;
 /* File descriptor for socket */
 int serv_sock;
-/* Connected peer stuff */
-struct sockaddr_storage peer_addr;
-socklen_t peer_addr_len;
-/* Full packet */
-char packet[sizeof(struct prot_head) + MAX_LEN];
-/* Header read from the packet */
-struct prot_head head;
-/* Data read from the packet */
-char *data;
 
 /* Display the IPv4 address for any interfaces */
 void display_server_ip () {
@@ -65,7 +74,7 @@ int create_server_socket () {
     struct addrinfo *result;
     struct addrinfo *rp;
 
-    memset(&hints, 0, sizeof(struct addrinfo));
+    memset(&hints, 0, sizeof(hints));
     hints.ai_family = DOMAIN;
     hints.ai_socktype = TYPE;
     /* Wildcard IP addresses */
@@ -115,6 +124,9 @@ void begin_server_mode (char *p) {
     char host[NI_MAXHOST];
     char service[NI_MAXSERV];
 
+    /* Testing data */
+    generate_test_data();
+
     port = p;
     printf("Begin server mode\n");
     display_server_ip();
@@ -127,30 +139,26 @@ void begin_server_mode (char *p) {
         exit(EXIT_FAILURE);
     }
 
-    /* Read packet from the socket */
+    /* Read packets from the socket */
     while (active) {
         peer_addr_len = sizeof(socklen_t);
 
         /* Get the packet */
-        memset(packet, 0, sizeof(packet));
-        nread = recvfrom(serv_sock, packet, sizeof(packet), 0,
-            (struct sockaddr*) &peer_addr, &peer_addr_len);
-        if (!getnameinfo((struct sockaddr*) &peer_addr, peer_addr_len,
-            host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV)) {
-            /* Read the header */
-            memcpy(&head, packet, sizeof(head));
+        nread = get_packet_s(serv_sock, host, service);
+        if (nread > 0) {
             /* Parse the header */
             if (head.type == KEY) {
                 /* Begin the key exchange on the server */
                 printf("Got a KEY from client\n");
-                key = kx_server(head, packet, serv_sock, nread,
-                    (struct sockaddr*) &peer_addr, peer_addr_len);
+                key = kx_server(serv_sock);
                 if (key > 0) {
                     printf("Key: %d\n", key);
                 }
             } else if (head.type == KEY_RESET) {
                 printf("Got a KEY_RESET from client\n");
                 key = 0;
+            } else if (head.type == REQUEST_DATA) {
+                printf("Got a REQUEST_DATA from client\n");
             } else if (head.type == CLOSE_CONNECTION) {
                 printf("Got a CLOSE_CONNECTION from client\n");
                 active = 0;
@@ -159,33 +167,6 @@ void begin_server_mode (char *p) {
             }
         }
     }
-
-    /* Test get data */
-    /*
-    while (1) {
-        ssize_t nread;
-        int i;
-        char host[NI_MAXHOST];
-        char service[NI_MAXSERV];
-
-        peer_addr_len = sizeof(struct sockaddr_storage);
-        nread = recvfrom(serv_sock, &i, sizeof(int), 0,
-            (struct sockaddr*) &peer_addr, &peer_addr_len);
-
-        if (!getnameinfo((struct sockaddr*) &peer_addr, peer_addr_len, host,
-            NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV)) {
-            printf("Got %d from client\n", i);
-            i = -i;
-        } else {
-            printf("Failed request\n");
-        }
-
-        if (sendto(serv_sock, &i, nread, 0, (struct sockaddr*) &peer_addr,
-            peer_addr_len) != nread) {
-            printf("Failed to send response\n");
-        }
-    }
-    */
 
     /* Cleanup */
     close(serv_sock);

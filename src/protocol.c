@@ -26,21 +26,97 @@ const message_t KEY = 0;
 const message_t KEY_REPLY = 1;
 const message_t KEY_GOOD = 2;
 const message_t KEY_RESET = 3;
+
+const message_t REQUEST_DATA = 4;
+const message_t SEND_DATA = 5;
+
 const message_t CLOSE_CONNECTION = 65535;
 
-struct prot_head send_head;
-struct prot_head recv_head;
-char send_data[MAX_LEN];
-char recv_data[MAX_LEN];
-char send_packet[sizeof(struct prot_head) + MAX_LEN];
-char recv_packet[sizeof(struct prot_head) + MAX_LEN];
+/* Protocol header */
+struct prot_head head;
+/* Protocol data block */
+char data[MAX_LEN];
+/* Full protocol packet */
+#ifndef PACKET
+#define PACKET
+char packet[sizeof(head) + MAX_LEN];
+#endif
+
+/* Connected peer stuff */
+struct sockaddr_storage peer_addr;
+socklen_t peer_addr_len;
+
+/* Get a packet from the client socket */
+ssize_t get_packet_c (int sock) {
+    ssize_t ret = 0;
+
+    /* Clear variables */
+    memset(&head, 0, sizeof(head));
+    memset(data, 0, sizeof(data));
+    memset(packet, 0, sizeof(packet));
+
+    /* Read from socket */
+    if ((ret = read(sock, packet, sizeof(packet))) == -1) {
+        printf("Failed to read from socket\n");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Extract header and data */
+    memcpy(&head, packet, sizeof(head));
+    memcpy(data, packet + sizeof(head), sizeof(data));
+
+    return ret;
+}
+
+/* Get a packet from the server socket */
+ssize_t get_packet_s (int sock, char *host, char *service) {
+    ssize_t ret = 0;
+
+    /* Clear variables */
+    memset(packet, 0, sizeof(packet));
+    memset(&head, 0, sizeof(head));
+    memset(data, 0, sizeof(data));
+
+   /* Read from socket */
+    ret = recvfrom(sock, packet, sizeof(packet), 0,
+        (struct sockaddr*) &peer_addr, &peer_addr_len);
+    if (getnameinfo((struct sockaddr*) &peer_addr, peer_addr_len,
+        host, NI_MAXHOST, service, NI_MAXSERV, NI_NUMERICSERV)) {
+        printf("Failed to get request\n");
+        ret = -1;
+    } else {
+        /* Extract header and data */
+        memcpy(&head, packet, sizeof(head));
+        memcpy(data, packet + sizeof(head), sizeof(data));
+    }
+
+    return ret;
+}
+
+/* Send a packet over the client socket */
+ssize_t send_packet_c (int sock) {
+    memset(packet, 0, sizeof(packet));
+    memcpy(packet, &head, sizeof(head));
+    memcpy(packet + sizeof(head), data, sizeof(data));
+
+    return write(sock, packet, sizeof(packet)) == sizeof(packet);
+}
+
+/* Send a packet over the server socket */
+ssize_t send_packet_s (int sock) {
+    memset(packet, 0, sizeof(packet));
+    memcpy(packet, &head, sizeof(head));
+    memcpy(packet + sizeof(head), data, sizeof(data));
+
+    return sendto(sock, packet, sizeof(packet), 0,
+        (struct sockaddr*) &peer_addr, peer_addr_len) == sizeof(packet);
+}
 
 /* Perform a key exchange over the socket */
 int kx_client (int sock) {
     int key = 0;
     int recv_key = 0;
-    ssize_t len = sizeof(struct prot_head);
-    ssize_t data_len = 0;
 
 start_kx:
     /* Create the key on the client */
@@ -50,48 +126,35 @@ start_kx:
     /* Send a KEY to the server */
     printf("Sending a KEY to server\n");
     printf("Sending key to server: %d\n", key);
-    memset(&send_head, 0, len);
-    send_head.type = KEY;
-    send_head.length = sizeof(key) / DATA_MULT;
-    send_head.length += (sizeof(key) % DATA_MULT) ? 1 : 0;
-    data_len = send_head.length * DATA_MULT;
-    memset(send_data, 0, data_len);
-    memcpy(send_data, &key, sizeof(key));
-    len = sizeof(send_head) + data_len;
-    memcpy(send_packet, &send_head, sizeof(send_head));
-    memcpy((send_packet + sizeof(send_head)), send_data, data_len);
-    if(write(sock, send_packet, len) != len) {
+    /* Set header */
+    memset(&head, 0, sizeof(head));
+    head.type = KEY;
+    head.length = sizeof(key) / DATA_MULT;
+    head.length += (sizeof(key) % DATA_MULT) ? 1 : 0;
+    /* Set data */
+    memset(data, 0, sizeof(data));
+    memcpy(data, &key, sizeof(key));
+    if(!send_packet_c(sock)) {
         printf("Failed to write everything\n");
         close(sock);
         exit(EXIT_FAILURE);
     }
 
     /* Wait for KEY_REPLY from server */
-    memset(&recv_head, 0, len);
-    while(recv_head.type != KEY_REPLY) {
-        memset(recv_packet, 0, sizeof(recv_packet));
-
-        if (read(sock, recv_packet, len) == -1) {
-            printf("Failed to read from socket\n");
-            close(sock);
-            exit(EXIT_FAILURE);
-        }
-        memcpy(&recv_head, recv_packet, sizeof(recv_head));
-        memcpy(&recv_key, recv_packet + sizeof(recv_head), sizeof(recv_key));
-    }
+    do {
+        get_packet_c(sock);
+    } while(head.type != KEY_REPLY);
     printf("Got a KEY_REPLY from server\n");
-    printf("Got key from server: %d\n", recv_key);
 
     /* Test if key good */
+    memcpy(&recv_key, data, sizeof(recv_key));
+    printf("Got key from server: %d\n", recv_key);
     if (key == recv_key) {
         /* Send KEY_GOOD to server */
         printf("Sending a KEY_GOOD to server\n");
-        memset(&send_head, 0, len);
-        send_head.type = KEY_GOOD;
-        len = sizeof(send_head);
-        memset(send_packet, 0, sizeof(send_packet));
-        memcpy(send_packet, &send_head, sizeof(send_head));
-        if(write(sock, send_packet, len) != len) {
+        memset(&head, 0, sizeof(head));
+        head.type = KEY_GOOD;
+        if(!send_packet_c(sock)) {
             printf("Failed to write everything\n");
             close(sock);
             exit(EXIT_FAILURE);
@@ -101,12 +164,9 @@ start_kx:
     } else {
         /* Send a KEY_RESET to server */
         printf("Sending a KEY_RESET to server\n");
-        memset(&send_head, 0, len);
-        send_head.type = KEY_RESET;
-        len = sizeof(send_head);
-        memset(send_packet, 0, sizeof(send_packet));
-        memcpy(send_packet, &send_head, sizeof(send_head));
-        if(write(sock, send_packet, len) != len) {
+        memset(&head, 0, sizeof(head));
+        head.type = KEY_RESET;
+        if(!send_packet_c(sock)) {
             printf("Failed to write everything\n");
             close(sock);
             exit(EXIT_FAILURE);
@@ -115,48 +175,35 @@ start_kx:
     }
 }
 
-int kx_server (struct prot_head init_head, char *pack, int sock, ssize_t len,
-    struct sockaddr *peer_addr, socklen_t peer_addr_len) {
+int kx_server (int sock) {
     char host[NI_MAXHOST];
     char service[NI_MAXSERV];
     int key = 0;
-    ssize_t data_len = 0;
 
     /* Extract the key */
-    memcpy(&key, pack + sizeof(init_head), sizeof(key));
+    memcpy(&key, packet + sizeof(head), sizeof(key));
     printf("Got key from client: %d\n", key);
 
     /* Send a KEY_REPLY to the client */
     printf("Sending a KEY_REPLY to client\n");
-    memset(&send_head, 0, len);
-    send_head.type = KEY_REPLY;
-    send_head.length = sizeof(key) / DATA_MULT;
-    send_head.length += (sizeof(key) % DATA_MULT) ? 1 : 0;
-    data_len = send_head.length * DATA_MULT;
-    memset(send_data, 0, data_len);
-    memcpy(send_data, &key, sizeof(key));
-    len = sizeof(send_head) + data_len;
-    memcpy(send_packet, &send_head, sizeof(send_head));
-    memcpy((send_packet + sizeof(send_head)), send_data, data_len);
-    if (sendto(sock, send_packet, len, 0, peer_addr, peer_addr_len) != len) {
+    /* Set header */
+    memset(&head, 0, sizeof(head));
+    head.type = KEY_REPLY;
+    head.length = sizeof(key) / DATA_MULT;
+    head.length += (sizeof(key) % DATA_MULT) ? 1 : 0;
+    /* Set data */
+    memset(data, 0, sizeof(data));
+    memcpy(data, &key, sizeof(key));
+    if (!send_packet_s(sock)) {
         printf("Failed to send response\n");
     }
 
     /* Wait for a KEY_GOOD or KEY_RESET from the client */
-    memset(recv_packet, 0, sizeof(recv_packet));
-    memset(&recv_head, 0, sizeof(recv_head));
-    recvfrom(sock, recv_packet, sizeof(recv_packet), 0, peer_addr,
-        &peer_addr_len);
-    if (getnameinfo(peer_addr, peer_addr_len, host, NI_MAXHOST, service,
-        NI_MAXSERV, NI_NUMERICSERV)) {
-        printf("Failed request\n");
-    }
-    /* Get the header */
-    memcpy(&recv_head, recv_packet, sizeof(recv_head));
-    if (recv_head.type == KEY_GOOD) {
+    get_packet_s(sock, host, service);
+    if (head.type == KEY_GOOD) {
         printf("Got a KEY_GOOD from client\n");
         return key;
-    } else if (recv_head.type == KEY_RESET) {
+    } else if (head.type == KEY_RESET) {
         printf("Got a KEY_RESET from client\n");
         return 0;
     }
