@@ -1,3 +1,4 @@
+#include <gcrypt.h>
 #include <ifaddrs.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -10,6 +11,11 @@
 
 #include "protocol.h"
 #include "server.h"
+
+#ifndef DATA
+#define DATA
+char data[MAX_LEN];
+#endif
 
 #ifndef PACKET
 #define PACKET
@@ -119,7 +125,6 @@ int create_server_socket () {
 /* Entry point into server mode */
 void begin_server_mode (char *p) {
     int active = 1;
-    int key = 0;
     ssize_t nread;
     char host[NI_MAXHOST];
     char service[NI_MAXSERV];
@@ -154,11 +159,19 @@ void begin_server_mode (char *p) {
                 if (key > 0) {
                     printf("Key: %d\n", key);
                 }
+
+                /* Setup gcrypt on the server */
+                if (setup_gcrypt()) {
+                    printf("Error setting up gcrypt\n");
+                    close(serv_sock);
+                    exit(EXIT_FAILURE);
+                }
             } else if (head.type == KEY_RESET) {
                 printf("Got a KEY_RESET from client\n");
                 key = 0;
             } else if (head.type == REQUEST_DATA) {
                 printf("Got a REQUEST_DATA from client\n");
+                handle_request_data(serv_sock);
             } else if (head.type == CLOSE_CONNECTION) {
                 printf("Got a CLOSE_CONNECTION from client\n");
                 active = 0;
@@ -169,7 +182,10 @@ void begin_server_mode (char *p) {
     }
 
     /* Cleanup */
+    printf("Closing socket\n");
     close(serv_sock);
+    printf("Cleaning up gcrypt\n");
+    gcry_md_close(hd);
 
     exit(EXIT_SUCCESS);
 }

@@ -1,3 +1,4 @@
+#include <gcrypt.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,11 @@
 
 #include "protocol.h"
 #include "client.h"
+
+#ifndef DATA
+#define DATA
+char data[MAX_LEN];
+#endif
 
 #ifndef PACKET
 #define PACKET
@@ -70,10 +76,9 @@ int create_client_socket () {
 
 /* Entry point into client mode */
 void begin_client_mode (char *i, char *p) {
-    int key = 0;
-    /* int j = 0; */
-    /* int k = 0; */
-    /* ssize_t len = sizeof(int); */
+    const char *dir = "./";
+    char *name;
+    char *fname = NULL;
     ip = i;
     port = p;
 
@@ -92,6 +97,29 @@ void begin_client_mode (char *i, char *p) {
     key = kx_client(cli_sock);
     printf("Key: %d\n", key);
 
+    /* Setup gcrypt on the client */
+    if (setup_gcrypt()) {
+        printf("Error setting up gcrypt\n");
+        close(cli_sock);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Get directory info */
+    request_data(cli_sock, DIR_INFO, dir);
+    do {
+        printf("%s> ", dir);
+        scanf("%ms", &name);
+        fname = realloc(fname, strlen(dir) + strlen(name) + 1);
+        memset(fname, 0, strlen(dir) + strlen(name) + 1);
+        strcat(fname, dir);
+        strcat(fname, name);
+        if (!strcmp(name, "quit")) {
+            break;
+        }
+        request_data(cli_sock, FILE_CONTENTS, fname);
+    } while (1);
+    free(name);
+
     /* Close the connetion */
     printf("Sending a CLOSE_CONNECTION to server\n");
     memset(&head, 0, sizeof(head));
@@ -103,7 +131,10 @@ void begin_client_mode (char *i, char *p) {
     }
 
     /* Cleanup */
+    printf("Closing socket\n");
     close(cli_sock);
+    printf("Cleaning up gcrypt\n");
+    gcry_md_close(hd);
 
     exit(EXIT_SUCCESS);
 }

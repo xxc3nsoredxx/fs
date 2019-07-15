@@ -1,3 +1,4 @@
+#include <gcrypt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +49,14 @@ int main (int argc, char **argv) {
     if (argc == 1) {
         goto fail;
     }
+
+    /* Initialize gcrypt */
+    if (!gcry_check_version(GCRYPT_VERSION)) {
+        printf("Libgcrypt version mismatch\n");
+        exit(EXIT_FAILURE);
+    }
+    gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
+    gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
 
     /* Seed random */
     srand(time(NULL));
